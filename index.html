@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Konum Takibi</title>
+<link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet" />
+<script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
+<style>
+  body { margin:0; padding:0; }
+  #map { width:100vw; height:100vh; }
+  #konum {
+    position:absolute;
+    top:10px; left:10px;
+    z-index:2;
+    background:white;
+    padding:8px 10px;
+    border-radius:5px;
+    cursor:pointer;
+    font-size:18px;
+  }
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+<a href="#" id="konum" title="Konumumu Göster">📍</a>
+
+<script>
+mapboxgl.accessToken = 'pk.eyJ1IjoiZ2VvZ3JhcGh5cHJvZiIsImEiOiJjanYxb2t1ZG8wNGU1NGFsNXVkcnhzNmFpIn0.M3qCJK8FYa06B-Irc6FD-g';
+
+const map = new mapboxgl.Map({
+  container: 'map',
+  style: 'mapbox://styles/mapbox/streets-v12',
+  center: [32.85, 39.93],
+  zoom: 10
+});
+
+let userSourceAdded = false;
+let pulseRadius = 6;
+let growing = true;
+let firstFly = true;
+let watchId = null; // yalnızca bir kez başlatmak için
+
+document.getElementById('konum').addEventListener('click', (e) => {
+  e.preventDefault();
+
+  if (!("geolocation" in navigator)) {
+    alert("Tarayıcınız konum özelliğini desteklemiyor.");
+    return;
+  }
+
+  // Eğer watch zaten çalışıyorsa tekrar başlatma
+  if (watchId !== null) return;
+
+  watchId = navigator.geolocation.watchPosition(position => {
+    const { latitude, longitude } = position.coords;
+
+    // İlk seferde source ve layer ekle
+    if (!userSourceAdded) {
+      map.addSource('user', {
+        type: 'geojson',
+        data: {
+          type: 'FeatureCollection',
+          features: [{
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: [longitude, latitude] }
+          }]
+        }
+      });
+
+      map.addLayer({
+        id: 'user-circle',
+        type: 'circle',
+        source: 'user',
+        paint: {
+          'circle-radius': pulseRadius,
+          'circle-color': '#007BFF',
+          'circle-opacity': 0.5,
+          'circle-stroke-color': 'white',
+          'circle-stroke-width': 2
+        }
+      });
+
+      userSourceAdded = true;
+
+      // Pulse animasyonu
+      function animatePulse() {
+        if (growing) {
+          pulseRadius += 0.15;
+          if (pulseRadius >= 12) growing = false;
+        } else {
+          pulseRadius -= 0.15;
+          if (pulseRadius <= 4) growing = true;
+        }
+        map.setPaintProperty('user-circle', 'circle-radius', pulseRadius);
+        requestAnimationFrame(animatePulse);
+      }
+      requestAnimationFrame(animatePulse);
+    } else {
+      // Koordinatı güncelle
+      map.getSource('user').setData({
+        type: 'FeatureCollection',
+        features: [{
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [longitude, latitude] }
+        }]
+      });
+    }
+
+    // Sadece ilk konumda flyTo
+    if (firstFly) {
+      map.flyTo({ center: [longitude, latitude], zoom: 16 });
+      firstFly = false;
+    }
+
+  }, error => {
+    switch(error.code){
+      case error.PERMISSION_DENIED: alert("Konum erişimine izin verilmedi."); break;
+      case error.POSITION_UNAVAILABLE: alert("Konum bilgisi mevcut değil."); break;
+      case error.TIMEOUT: alert("Konum isteği zaman aşımına uğradı."); break;
+      default: alert("Bilinmeyen bir hata oluştu."); break;
+    }
+  }, { enableHighAccuracy:true, maximumAge:0 });
+});
+
+</script>
+</body>
+</html>
